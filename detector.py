@@ -59,7 +59,7 @@ def download_if_not_present(url, file_name):
                     percentage = min(int(100 * downloaded / total_length), 100)
                     progress = min(int(50 * downloaded / total_length), 50)
                     sys.stdout.write("\rDownloading {} [{} {}] {}%".format(print_file_name, '=' * progress,
-                                                                           ' ' * (50-progress), percentage))
+                                                                           ' ' * (50 - progress), percentage))
                     sys.stdout.flush()
                 sys.stdout.write("\n")
                 sys.stdout.flush()
@@ -84,6 +84,7 @@ def print_ascii_large(text, font_size=18):
         if len(s.strip()) > 0:
             print(s)
     print()
+
 
 def read_config(filename):
     """
@@ -151,10 +152,10 @@ def blur_area(image, top_x, top_y, w, h):
      :type h: int
     """
     # get the rectangle img around all the faces and apply blur
-    sub_frame = image[top_y:top_y+h, top_x:top_x+w]
+    sub_frame = image[top_y:top_y + h, top_x:top_x + w]
     sub_frame = cv2.GaussianBlur(sub_frame, (31, 31), 30)
     # merge back into the frame
-    image[top_y:top_y+sub_frame.shape[0], top_x:top_x+sub_frame.shape[1]] = sub_frame
+    image[top_y:top_y + sub_frame.shape[0], top_x:top_x + sub_frame.shape[1]] = sub_frame
     return image
 
 
@@ -170,7 +171,7 @@ def execute_network(image, network, layernames):
     network.setInput(blob)
     outputs = network.forward(layernames)
     end2 = time.time()
-    print("[INFO] YOLO  took      : %2.1f sec" % (end2-start2))
+    print("[INFO] YOLO  took      : %2.1f sec" % (end2 - start2))
     return outputs
 
 
@@ -303,7 +304,7 @@ def get_filesource(filename):
     return video_device, width, height
 
 
-def update_frame(image, people_indxs, class_ids, detected_boxes, conf_levels, colors, labels,
+def update_frame(image, people_indxs, class_ids, detected_boxes, conf_levels, labels,
                  show_boxes, blur, box_all_objects):
     """
     Add bounding boxes and counted number of people to the frame
@@ -317,23 +318,34 @@ def update_frame(image, people_indxs, class_ids, detected_boxes, conf_levels, co
             # extract the bounding box coordinates
             (x, y, w, h) = (detected_boxes[i][0], detected_boxes[i][1], detected_boxes[i][2], detected_boxes[i][3])
 
-            if classIDs[i] == 0:
+            if class_ids[i] == 0:
                 count_people += 1
                 # Blur, if required, people in the image
                 if blur:
                     image = blur_area(image, max(x, 0), max(y, 0), w, h)
 
             # draw a bounding box rectangle and label on the frame
-            if (show_boxes and classIDs[i] == 0) or box_all_objects:
-                color = [int(c) for c in colors[class_ids[i]]]
+            if (show_boxes and class_ids[i] == 0) or box_all_objects:
+                color = [255, 0, 0]
                 cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
-                text = "{}: {:.2f}".format(labels[classIDs[i]], conf_levels[i])
+                text = "{}: {:.2f}".format(labels[class_ids[i]], conf_levels[i])
                 cv2.putText(image, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     # write number of people in bottom corner
     text = "Persons: {}".format(count_people)
     cv2.putText(image, text, (10, image.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     return image, count_people
+
+
+def get_people_count(people_indxs, class_ids):
+    # ensure at least one detection exists
+    count_people = 0
+    if len(people_indxs) >= 1:
+        for i in people_indxs.flatten():
+
+            if class_ids[i] == 0:
+                count_people += 1
+    return count_people
 
 
 def show_plots(data):
@@ -427,7 +439,7 @@ if __name__ == '__main__':
     # Create output windows, but limit on 1440x810
     cv2.namedWindow('Video', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('Video', min(cam_width, 1440), min(cam_height, 810))
-    #cv2.resizeWindow('Video', min(cam_width, 640), min(cam_height, 360))
+    # cv2.resizeWindow('Video', min(cam_width, 640), min(cam_height, 360))
     cv2.moveWindow('Video', 0, 0)
     # Create plot
     if show_graphs:
@@ -449,11 +461,11 @@ if __name__ == '__main__':
         # Feed frame to network
         layerOutputs = execute_network(frame, net, ln)
         # Obtain detected objects, including cof levels and bounding boxes
-        (idxs, classIDs, boxes, confidences) = get_detected_items(layerOutputs, nw_confidence, nw_threshold,
+        (idxs, class_ids_network, boxes, confidences) = get_detected_items(layerOutputs, nw_confidence, nw_threshold,
                                                                   cam_width, cam_height)
 
         # Update frame with recognised objects
-        frame, npeople = update_frame(frame, idxs, classIDs, boxes, confidences, COLORS, LABELS, showpeopleboxes,
+        frame, npeople = update_frame(frame, idxs, class_ids_network, boxes, confidences, COLORS, LABELS, showpeopleboxes,
                                       blurpeople, showallboxes)
         save_count(countfile, npeople)
 
@@ -467,21 +479,20 @@ if __name__ == '__main__':
         cv2.imshow('Video', frame)
         # write the output frame to disk, repeat (time taken * 30 fps) in order to get a video at real speed
         if save_video:
-            frame_cnt = int((time.time()-start)*fps) if webcam and realspeed else 1
+            frame_cnt = int((time.time() - start) * fps) if webcam and realspeed else 1
             save_frame(writer, frame, frame_cnt)
 
         end = time.time()
         print("[INFO] Total handling  : %2.1f sec" % (end - start))
         print("[INFO] People in frame : {}".format(npeople))
         if print_ascii:
-            print_ascii_large(str(npeople)+ (" persons" if npeople > 1 else " person"))
+            print_ascii_large(str(npeople) + (" persons" if npeople > 1 else " person"))
         # Check for exit
         if cv2.waitKey(25) & 0xFF == ord('q'):
             break
 
     # release the file pointers
     print("[INFO] cleaning up...")
-
 
     if save_video:
         writer.release()
